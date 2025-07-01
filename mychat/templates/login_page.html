@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatApp - Login</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css" rel="stylesheet">
+
+</head>
+<body>
+    
+    <div class="login-container">
+        <div class="logo">
+            <h3>ChatApp</h3>
+        </div>
+        
+        <form id="loginForm">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="username" class="form-control" id="username" required>
+            </div>
+            
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" required>
+            </div>
+            
+            
+            <button type="submit" class="btn btn-primary btn-login w-100">
+                Sign In
+            </button>
+        </form>
+        
+        <div class="divider">
+            <span>or</span>
+        </div>
+        
+        <div class="register-link">
+            <p class="mb-0">Don't have an account? <a href="{% url 'register' %}">Create one</a></p>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const submitBtn = document.querySelector('.btn-login');
+
+    // Remove existing error
+    document.querySelectorAll('.error-message').forEach(el => el.remove());
+
+    if (!username || !password) {
+        showError('Please fill in all fields');
+        return;
+    }
+
+    // Show loading
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Signing in...';
+    submitBtn.disabled = true;
+
+    try {
+        // 🔐 Request JWT Token from backend
+        const jwtResponse = await fetch('/api/token/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({ username, password })
+        });
+
+        const jwtData = await jwtResponse.json();
+
+        if (!jwtResponse.ok || !jwtData.access) {
+            showError(jwtData.detail || 'JWT Authentication failed');
+            return;
+        }
+
+        //Store JWT tokens for later use (access and refresh)
+        localStorage.setItem('access_token', jwtData.access);
+        localStorage.setItem('refresh_token', jwtData.refresh);
+
+        const sessionResponse = await fetch('/user/login/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken(),
+            },
+            body: JSON.stringify({ username, password })
+        });
+
+        const sessionData = await sessionResponse.json();
+
+        if (sessionData.success) {
+            window.location.href = '/home/';
+        } else {
+            showError(sessionData.error || 'Login failed');
+        }
+
+    } catch (error) {
+        showError('Network error. Please try again.');
+    } finally {
+        submitBtn.innerHTML = 'Sign In';
+        submitBtn.disabled = false;
+    }
+});
+
+// Show error message
+function showError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'alert alert-danger error-message mt-3';
+    errorDiv.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>${message}`;
+    document.getElementById('loginForm').appendChild(errorDiv);
+}
+
+// Helper to get CSRF token
+function getCSRFToken() {
+    const cookieValue = document.cookie.match('(^|;)\\s*csrftoken\\s*=\\s*([^;]+)');
+    return cookieValue ? cookieValue.pop() : '';
+}
+</script>
+</body>
+</html>

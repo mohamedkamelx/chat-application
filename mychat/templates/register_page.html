@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatApp - Register</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css" rel="stylesheet">
+
+</head>
+<body>
+    <div class="register-container">
+        <div class="logo">
+            <h3>ChatApp</h3>
+            <p class="text-muted mb-0">Create your account</p>
+            <br>
+        </div>
+        
+        <form id="registerForm">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="firstName" class="form-label">First Name</label>
+                    <input type="text" class="form-control" id="firstName" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="lastName" class="form-label">Last Name</label>
+                    <input type="text" class="form-control" id="lastName" required>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" required>
+                <div class="password-requirements">Choose a unique username</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" required>
+                <div class="password-requirements">At least 8 characters with letters and numbers</div>
+                <div id="passwordStrength" class="mt-1"></div> <!-- Add this line -->
+            </div>
+
+            
+            <div class="mb-3">
+                <label for="confirmPassword" class="form-label">Confirm Password</label>
+                <input type="password" class="form-control" id="confirmPassword" required>
+                <div id="passwordMatch" class="mt-1" style="font-size: 0.85rem;"></div> <!-- Add this line -->
+
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-register w-100">
+                Create Account
+            </button>
+        </form>
+        
+        <div class="divider">
+            <span>or</span>
+        </div>
+        
+        <div class="login-link">
+            <p class="mb-0">Already have an account? <a href="{% url 'login' %}">Sign in</a></p>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<script>document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('registerForm');
+    const passwordInput = document.getElementById('password');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    const passwordStrengthIndicator = document.getElementById('passwordStrength');
+    const submitBtn = document.querySelector('.btn-register');
+
+    // Real-time password strength checking
+    passwordInput.addEventListener('input', function () {
+        const password = passwordInput.value;
+        const strength = checkPasswordStrength(password);
+        updatePasswordStrengthUI(strength, password);
+    });
+
+    // Form submission handler
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const firstName = document.getElementById('firstName').value.trim();
+        const lastName = document.getElementById('lastName').value.trim();
+        const username = document.getElementById('username').value.trim();
+        const password = passwordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
+
+        clearMessages();
+
+        if (!firstName || !lastName || !username || !password || !confirmPassword) {
+            showMessage('Please fill in all fields');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            showMessage('Passwords do not match');
+            return;
+        }
+
+        if (!isPasswordStrongEnough(password)) {
+            showMessage('Password is too weak. Use 8+ characters, including uppercase, lowercase, number, and symbol.');
+            return;
+        }
+
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating Account...';
+        submitBtn.disabled = true;
+
+        try {
+            const response = await fetch('/user/register/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken(),
+                },
+                body: JSON.stringify({ firstName, lastName, username, password })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showMessage('Account created successfully! Redirecting...', 'success');
+
+                // 🔐 Automatically obtain JWT token after registration
+                const jwtResponse = await fetch('/api/token/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const jwtData = await jwtResponse.json();
+
+                if (jwtResponse.ok && jwtData.access) {
+                    localStorage.setItem('access_token', jwtData.access);
+                    localStorage.setItem('refresh_token', jwtData.refresh);
+
+                    // Redirect to home
+                    setTimeout(() => window.location.href = '/home/', 1000);
+                } else {
+                    showMessage('Registration succeeded, but automatic login failed.', 'warning');
+                }
+
+            } else {
+                showMessage(data.error || 'Registration failed');
+            }
+
+        } catch (error) {
+            showMessage('Network error. Please try again.');
+        } finally {
+            submitBtn.innerHTML = 'Create Account';
+            submitBtn.disabled = false;
+        }
+    });
+
+    // Check if password is strong enough (at least score 3 of 5)
+    function isPasswordStrongEnough(password) {
+        return checkPasswordStrength(password).score >= 3;
+    }
+
+    // Password strength logic
+    function checkPasswordStrength(password) {
+        const checks = {
+            length: password.length >= 8,
+            uppercase: /[A-Z]/.test(password),
+            lowercase: /[a-z]/.test(password),
+            number: /\d/.test(password),
+            special: /[^A-Za-z0-9]/.test(password)
+        };
+        const score = Object.values(checks).filter(Boolean).length;
+        return { score };
+    }
+
+    // Update strength indicator UI
+    function updatePasswordStrengthUI(strength, password) {
+        const strengthText = ['Very Weak', 'Weak', 'Medium', 'Strong', 'Very Strong'];
+        const colors = ['#dc3545', '#fd7e14', '#ffc107', '#28a745', '#007bff'];
+
+        if (password) {
+            passwordStrengthIndicator.textContent = `Strength: ${strengthText[strength.score]}`;
+            passwordStrengthIndicator.style.color = colors[strength.score];
+        } else {
+            passwordStrengthIndicator.textContent = '';
+        }
+    }
+const passwordMatchIndicator = document.getElementById('passwordMatch');
+
+function checkPasswordsMatch() {
+    const password = passwordInput.value;
+    const confirmPassword = confirmPasswordInput.value;
+
+    if (!confirmPassword) {
+        passwordMatchIndicator.textContent = '';
+        return;
+    }
+
+    if (password === confirmPassword) {
+        passwordMatchIndicator.textContent = '✔ Passwords match';
+        passwordMatchIndicator.style.color = 'green';
+    } else {
+        passwordMatchIndicator.textContent = '✖ Passwords do not match';
+        passwordMatchIndicator.style.color = 'red';
+    }
+}
+
+passwordInput.addEventListener('input', checkPasswordsMatch);
+confirmPasswordInput.addEventListener('input', checkPasswordsMatch);
+
+    // Show messages
+    function showMessage(message, type = 'danger') {
+        clearMessages();
+        const div = document.createElement('div');
+        div.className = `alert alert-${type} mt-3 message-alert`;
+        div.innerHTML = `<i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>${message}`;
+        form.appendChild(div);
+    }
+
+    // Clear previous alerts
+    function clearMessages() {
+        document.querySelectorAll('.message-alert').forEach(el => el.remove());
+    }
+
+    // CSRF token getter
+    function getCSRFToken() {
+        const match = document.cookie.match(/csrftoken=([\w-]+)/);
+        return match ? match[1] : '';
+    }
+});
+
+</script>
+
+</body>
+</html>

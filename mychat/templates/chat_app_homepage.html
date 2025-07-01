@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Home</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .nav-tabs .nav-link {
+            color: #6c757d;
+            border: none;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-tabs .nav-link.active {
+            color: #0d6efd;
+            border-bottom-color: #0d6efd;
+            background: none;
+        }
+        .section-header {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .chat-section {
+            min-height: 400px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container-fluid h-100">
+        <div class="row h-100">
+            <!-- Main Chat Interface -->
+            <div class="col-12 col-md-8 col-lg-6 mx-auto">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header bg-white border-bottom">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0">Chats</h4>
+                            <div class="d-flex gap-3 align-items-center my-3">
+
+                                <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+                                    <i class="fas fa-plus me-2"></i> New Group
+                                </button>
+                                <form id="logout-form" method="POST" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-danger btn-sm d-flex align-items-center">
+                                        <i class="fas fa-sign-out-alt me-2"></i> Logout
+                                    </button>
+                                </form>
+
+
+                            </div>
+
+                        </div>
+                        
+                        <!-- Navigation Tabs -->
+                        <ul class="nav nav-tabs" id="chatTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="private-tab" data-bs-toggle="tab" data-bs-target="#private-chats" type="button" role="tab">
+                                    <i class="fas fa-user me-2"></i>Private Chats
+                                    <span id="privateCount" class="badge bg-secondary ms-1">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="groups-tab" data-bs-toggle="tab" data-bs-target="#group-chats" type="button" role="tab">
+                                    <i class="fas fa-users me-2"></i>Groups
+                                    <span id="groupCount" class="badge bg-secondary ms-1">0</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="card-body p-0">
+                        <div class="tab-content" id="chatTabContent">
+                            <!-- Private Chats Tab -->
+                            <div class="tab-pane fade show active chat-section" id="private-chats" role="tabpanel">
+                                <!-- Search Bar for Private Chats -->
+                                <div class="section-header p-3">
+                                    <div class="position-relative">
+                                        <input type="text" class="form-control" id="privateSearchInput" placeholder="Search private chats...">
+                                        <div class="position-absolute w-100 bg-white border rounded-bottom shadow-sm" id="privateSearchResults" style="top: 100%; z-index: 1050; display: none; max-height: 200px; overflow-y: auto;"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Private Chat List -->
+                                <div id="privateChatList" class="list-group list-group-flush">
+                                    <!-- Private chats will be populated here -->
+                                </div>
+                                
+                                <!-- No private chats message -->
+                                <div id="noPrivateChats" class="text-center py-5 text-muted" style="display: none;">
+                                    <i class="fas fa-comment-dots fa-3x mb-3 text-muted"></i>
+                                    <p>No private chats yet. Start a conversation!</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Group Chats Tab -->
+                            <div class="tab-pane fade chat-section" id="group-chats" role="tabpanel">
+                                <!-- Join Group Section -->
+                                <div class="section-header p-3">
+                                    <div class="d-flex gap-2">
+                                        <input type="text" class="form-control" id="groupCodeInput" placeholder="Enter group code to join...">
+                                        <button class="btn btn-primary" id="joinGroupBtn">
+                                            <i class="fas fa-sign-in-alt me-1"></i> Join
+                                        </button>
+                                    </div>
+                                    <div id="joinGroupMessage" class="mt-2" style="display: none;"></div>
+                                </div>
+                                
+                                <!-- Group Chat List -->
+                                <div id="groupChatList" class="list-group list-group-flush">
+                                    <!-- Group chats will be populated here -->
+                                </div>
+                                
+                                <!-- No groups message -->
+                                <div id="noGroups" class="text-center py-5 text-muted" style="display: none;">
+                                    <i class="fas fa-users fa-3x mb-3 text-muted"></i>
+                                    <p>No groups yet. Create or join your first group!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div class="modal fade" id="createGroupModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createGroupForm">
+                        <div class="mb-3">
+                            <label for="groupName" class="form-label">Group Name</label>
+                            <input type="text" class="form-control" id="groupName" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="memberSearch" class="form-label">Add Members</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-control" id="memberSearch" placeholder="Search users by username...">
+                                <div class="position-absolute w-100 bg-white border rounded-bottom shadow-sm" id="memberSearchResults" style="top: 100%; z-index: 1051; display: none; max-height: 200px; overflow-y: auto;"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Selected Members -->
+                        <div class="mb-3">
+                            <label class="form-label">Selected Members</label>
+                            <div id="selectedMembers" class="d-flex flex-wrap gap-2">
+                                <!-- Selected members will appear here -->
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="createGroupBtn">Create Group</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+  <script>
+// Global state
+let privateChats = [];
+let groupChats = [];
+let selectedMembers = [];
+let searchTimeouts = {};
+let socket;
+
+// API endpoints
+const API = {
+    privateChats: '/chat/',
+    groupChats: '/group/',
+    joinGroup: '/group-join/',
+    searchUsers: '/search/',
+    login: '/api/token/'
+};
+
+// Utility functions
+const getCSRFToken = () => {
+    const match = document.cookie.match('(^|;)\\s*csrftoken\\s*=\\s*([^;]+)');
+    return match ? match.pop() : '';
+};
+
+const debounce = (func, delay) => {
+    return (...args) => {
+        clearTimeout(searchTimeouts[func.name]);
+        searchTimeouts[func.name] = setTimeout(() => func.apply(this, args), delay);
+    };
+};
+
+// Auth helper
+async function authFetch(url, options = {}, retry = true) {
+    const token = localStorage.getItem('access_token');
+    options.headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCSRFToken(),
+        ...options.headers
+    };
+
+    const response = await fetch(url, options);
+    
+    if (response.status === 401 && retry) {
+        if (await refreshToken()) {
+            return authFetch(url, options, false);
+        }
+        await promptReLogin();
+    }
+    return response;
+}
+
+async function refreshToken() {
+    const refresh = localStorage.getItem('refresh_token');
+    if (!refresh) return false;
+
+    try {
+        const response = await fetch('/api/token/refresh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('access_token', data.access);
+            return true;
+        }
+    } catch (e) {
+        console.error('Token refresh failed', e);
+    }
+    return false;
+}
+
+async function promptReLogin() {
+    const username = prompt('Session expired. Enter username:');
+    const password = prompt('Enter password:');
+    if (!username || !password) return;
+
+    try {
+        const response = await fetch(API.login, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('access_token', data.access);
+            localStorage.setItem('refresh_token', data.refresh);
+        }
+    } catch (e) {
+        alert('Login failed.');
+    }
+}
+
+// Chat loading functions
+async function loadChats() {
+    try {
+        const [privateResponse, groupResponse] = await Promise.all([
+            authFetch(API.privateChats),
+            authFetch(API.groupChats)
+        ]);
+        
+        // Fix: Use Set to prevent duplicates based on chat ID
+        const privateData = await privateResponse.json();
+        const groupData = await groupResponse.json();
+        
+        // Remove duplicates by creating a Map with ID as key
+        const uniquePrivateChats = new Map();
+        privateData.forEach(chat => {
+            uniquePrivateChats.set(chat.id, chat);
+        });
+        privateChats = Array.from(uniquePrivateChats.values());
+        
+        const uniqueGroupChats = new Map();
+        groupData.forEach(chat => {
+            uniqueGroupChats.set(chat.id, chat);
+        });
+        groupChats = Array.from(uniqueGroupChats.values());
+        
+        renderChats();
+    } catch (error) {
+        console.error('Error loading chats:', error);
+    }
+}
+
+// Render functions
+function renderChats() {
+    renderChatList(privateChats, 'privateChatList', 'noPrivateChats', 'private');
+    renderChatList(groupChats, 'groupChatList', 'noGroups', 'group');
+    updateChatCounts();
+}
+
+function renderChatList(chats, listId, noChatsId, type) {
+    const listEl = document.getElementById(listId);
+    const noChatsEl = document.getElementById(noChatsId);
+    
+    if (chats.length === 0) {
+        listEl.innerHTML = '';
+        noChatsEl.style.display = 'block';
+        return;
+    }
+    
+    noChatsEl.style.display = 'none';
+    listEl.innerHTML = chats.map(chat => createChatItem(chat, type)).join('');
+}
+
+function createChatItem(chat, type) {
+    const displayName = type === 'private' ? chat.username : chat.name;
+    const clickHandler = type === 'private' ? `openPrivateChat(${chat.id})` : `openGroupChat(${chat.id})`;
+    
+    return `
+        <div class="list-group-item list-group-item-action border-0 px-3 py-3" 
+             data-chat-id="${chat.id}" onclick="${clickHandler}">
+            <div class="d-flex align-items-center">
+                <div class="flex-grow-1 min-width-0">
+                    <h6 class="mb-1 text-truncate">${displayName}</h6>
+                    <p class="mb-0 text-muted text-truncate">${chat.lastMessage || ''}</p>
+                </div>
+                ${chat.unread > 0 ? `<span class="badge bg-primary rounded-pill">${chat.unread}</span>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function updateChatCounts() {
+    document.getElementById('privateCount').textContent = privateChats.length;
+    document.getElementById('groupCount').textContent = groupChats.length;
+}
+
+// Search functions
+const searchUsersForPrivateChat = debounce(async function(query) {
+    if (!query.trim()) {
+        document.getElementById('privateSearchResults').style.display = 'none';
+        renderChatList(privateChats, 'privateChatList', 'noPrivateChats', 'private');
+        return;
+    }
+
+    // Filter existing chats
+    const filteredChats = privateChats.filter(chat => 
+        chat.username.toLowerCase().includes(query.toLowerCase())
+    );
+    renderChatList(filteredChats, 'privateChatList', 'noPrivateChats', 'private');
+
+    // Search for new users
+    try {
+        const response = await authFetch(`${API.searchUsers}?q=${encodeURIComponent(query)}&type=private`);
+        const users = await response.json();
+        
+        if (users.length > 0) {
+            const searchResults = document.getElementById('privateSearchResults');
+            searchResults.innerHTML = users.map(user => `
+                <div class="p-2 border-bottom search-result-item" style="cursor: pointer;" 
+                     onclick="startNewPrivateChat('${user.id}', '${user.username}')">
+                    <div class="d-flex align-items-center">
+                        <div><small class="text-muted">@${user.username}</small></div>
+                        <small class="ms-auto text-primary">New Chat</small>
+                    </div>
+                </div>
+            `).join('');
+            searchResults.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error searching users:', error);
+    }
+}, 300);
+
+const searchMembers = debounce(async function(query) {
+    if (!query.trim()) {
+        document.getElementById('memberSearchResults').style.display = 'none';
+        return;
+    }
+
+    try {
+        const response = await authFetch(`${API.searchUsers}?q=${encodeURIComponent(query)}&type=member`);
+        const users = await response.json();
+        
+        const availableUsers = users.filter(user => 
+            !selectedMembers.some(member => member.id === user.id)
+        );
+        
+        const resultsEl = document.getElementById('memberSearchResults');
+        if (availableUsers.length > 0) {
+            resultsEl.innerHTML = availableUsers.map(user => `
+                <div class="p-2 border-bottom member-search-item" style="cursor: pointer;" 
+                     onclick="addMember('${user.id}', '${user.username}')">
+                    <small class="text-muted">@${user.username}</small>
+                </div>
+            `).join('');
+            resultsEl.style.display = 'block';
+        } else {
+            resultsEl.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error searching members:', error);
+    }
+}, 300);
+
+// Chat actions
+async function startNewPrivateChat(userId, userName) {
+    try {
+        const response = await authFetch(API.privateChats, {
+            method: 'POST',
+            body: JSON.stringify({ "username_input": userName })
+        });
+
+        if (!response.ok) {
+            alert('Failed to start chat');
+            return;
+        }
+
+        const chat = await response.json();
+        
+        // Check if chat already exists to prevent duplicates
+        if (!privateChats.some(existingChat => existingChat.id === chat.id)) {
+            const newChat = {
+                id: chat.id,
+                username: userName,
+                lastMessage: 'Start a conversation...',
+                unread: 0
+            };
+            privateChats.unshift(newChat);
+            renderChats();
+        }
+
+        // Clear search
+        document.getElementById('privateSearchResults').style.display = 'none';
+        document.getElementById('privateSearchInput').value = '';
+    } catch (error) {
+        console.error('Error starting private chat:', error);
+    }
+}
+
+async function joinGroupByCode(code) {
+    const messageEl = document.getElementById('joinGroupMessage');
+    const inputEl = document.getElementById('groupCodeInput');
+    
+    messageEl.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin me-2"></i>Joining group...</div>';
+    messageEl.style.display = 'block';
+
+    try {
+        const response = await authFetch(API.joinGroup, {
+            method: 'POST',
+            body: JSON.stringify({ code })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            messageEl.innerHTML = `<div class="text-danger"><i class="fas fa-exclamation-circle me-2"></i>${data.detail || 'Group not found'}</div>`;
+            setTimeout(() => messageEl.style.display = 'none', 3000);
+            return;
+        }
+
+        // Check if group already exists to prevent duplicates
+        if (!groupChats.some(existingGroup => existingGroup.id === data.id)) {
+            groupChats.unshift({
+                id: data.id,
+                name: data.name,
+                lastMessage: 'You joined the group',
+                unread: 0
+            });
+            renderChats();
+        }
+
+        messageEl.innerHTML = `<div class="text-success"><i class="fas fa-check-circle me-2"></i>Successfully joined "${data.name}"!</div>`;
+        inputEl.value = '';
+        setTimeout(() => messageEl.style.display = 'none', 3000);
+
+    } catch (error) {
+        console.error('Error joining group:', error);
+        messageEl.innerHTML = '<div class="text-danger">An error occurred while joining the group.</div>';
+        setTimeout(() => messageEl.style.display = 'none', 3000);
+    }
+}
+
+async function createGroup() {
+    const groupName = document.getElementById('groupName').value.trim();
+    
+    if (!groupName) {
+        alert('Please enter a group name');
+        return;
+    }
+    
+    if (selectedMembers.length === 0) {
+        alert('Please select at least one member');
+        return;
+    }
+    
+    try {
+        const response = await authFetch(API.groupChats, {
+            method: 'POST',
+            body: JSON.stringify({
+                name: groupName,
+                members: selectedMembers.map(m => m.id)
+            })
+        });
+        
+        const newGroup = await response.json();
+        
+        groupChats.unshift({
+            id: newGroup.id || Date.now(),
+            name: groupName,
+            lastMessage: 'Group created',
+            unread: 0
+        });
+        
+        renderChats();
+        
+        // Switch to groups tab and close modal
+        new bootstrap.Tab(document.getElementById('groups-tab')).show();
+        bootstrap.Modal.getInstance(document.getElementById('createGroupModal')).hide();
+        resetGroupModal();
+        
+    } catch (error) {
+        console.error('Error creating group:', error);
+    }
+}
+
+// Member management
+function addMember(id, username) {
+    selectedMembers.push({ id, username });
+    renderSelectedMembers();
+    document.getElementById('memberSearch').value = '';
+    document.getElementById('memberSearchResults').style.display = 'none';
+}
+
+function removeMember(id) {
+    selectedMembers = selectedMembers.filter(member => member.id !== id);
+    renderSelectedMembers();
+}
+
+function renderSelectedMembers() {
+    const el = document.getElementById('selectedMembers');
+    el.innerHTML = selectedMembers.length === 0 
+        ? '<small class="text-muted">No members selected</small>'
+        : selectedMembers.map(member => `
+            <span class="badge bg-light text-dark border d-flex align-items-center">
+                ${member.username}
+                <button type="button" class="btn-close btn-close-sm ms-2" style="font-size: 0.6em;" 
+                        onclick="removeMember('${member.id}')"></button>
+            </span>
+        `).join('');
+}
+
+function resetGroupModal() {
+    document.getElementById('groupName').value = '';
+    document.getElementById('memberSearch').value = '';
+    selectedMembers = [];
+    renderSelectedMembers();
+    document.getElementById('memberSearchResults').style.display = 'none';
+}
+
+// Navigation
+function openPrivateChat(chatId) {
+    window.location.href = `/chat/${chatId}`;
+}
+
+function openGroupChat(chatId) {
+    window.location.href = `/group/${chatId}`;
+}
+
+// WebSocket handling
+function initializeSocket() {
+    socket = new WebSocket('ws://localhost:PORT/ws/notifications/');
+
+    socket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'new_message') {
+            handleIncomingMessage(data);
+        }
+    };
+
+    socket.onclose = function() {
+        console.warn('WebSocket closed. Reconnecting...');
+        setTimeout(initializeSocket, 3000);
+    };
+}
+
+function handleIncomingMessage(data) {
+    const { chat_type, chat_id, message, sender } = data;
+    const chatList = chat_type === 'private' ? privateChats : groupChats;
+    const chatIndex = chatList.findIndex(chat => chat.id === chat_id);
+
+    if (chatIndex !== -1) {
+        const chat = chatList[chatIndex];
+        chat.lastMessage = `${sender}: ${message}`;
+        chat.unread += 1;
+        
+        // Move to top
+        chatList.splice(chatIndex, 1);
+        chatList.unshift(chat);
+        
+        renderChats();
+    }
+}
+
+// Event listeners setup
+function setupEventListeners() {
+    // Private search
+    document.getElementById('privateSearchInput').addEventListener('input', function() {
+        searchUsersForPrivateChat(this.value);
+    });
+
+    // Group join
+    const joinBtn = document.getElementById('joinGroupBtn');
+    const codeInput = document.getElementById('groupCodeInput');
+    
+    joinBtn.addEventListener('click', () => {
+        const code = codeInput.value.trim();
+        if (code) joinGroupByCode(code);
+    });
+    
+    codeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const code = e.target.value.trim();
+            if (code) joinGroupByCode(code);
+        }
+    });
+
+    // Member search
+    document.getElementById('memberSearch').addEventListener('input', function() {
+        searchMembers(this.value);
+    });
+
+    // Create group
+    document.getElementById('createGroupBtn').addEventListener('click', createGroup);
+
+    // Tab switching - clear inputs
+    document.querySelectorAll('#chatTabs button[data-bs-toggle="tab"]').forEach(trigger => {
+        trigger.addEventListener('shown.bs.tab', () => {
+            document.getElementById('privateSearchInput').value = '';
+            document.getElementById('groupCodeInput').value = '';
+            document.getElementById('privateSearchResults').style.display = 'none';
+            document.getElementById('joinGroupMessage').style.display = 'none';
+        });
+    });
+
+    // Hide search results on outside click
+    document.addEventListener('click', (e) => {
+        const privateSearch = document.getElementById('privateSearchInput');
+        const privateResults = document.getElementById('privateSearchResults');
+        const memberSearch = document.getElementById('memberSearch');
+        const memberResults = document.getElementById('memberSearchResults');
+        
+        if (!privateSearch.contains(e.target) && !privateResults.contains(e.target)) {
+            privateResults.style.display = 'none';
+        }
+        
+        if (!memberSearch.contains(e.target) && !memberResults.contains(e.target)) {
+            memberResults.style.display = 'none';
+        }
+    });
+
+    // Reset modal on close
+    document.getElementById('createGroupModal').addEventListener('hidden.bs.modal', resetGroupModal);
+}
+
+// Initialize app
+document.addEventListener('DOMContentLoaded', function() {
+    loadChats();
+    setupEventListeners();
+    initializeSocket();
+});
+</script>
+</body>
+</html>
