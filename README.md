@@ -34,7 +34,7 @@ A full-featured real-time chat application built with Django, supporting both we
 2. **Create virtual environment**
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   venv\Scripts\activate   # On mac: source venv/bin/activate
    ```
 
 3. **Install dependencies**
