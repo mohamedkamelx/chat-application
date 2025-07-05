@@ -166,12 +166,9 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
   <script>
-// Global state
-let privateChats = [];
-let groupChats = [];
-let selectedMembers = [];
-let searchTimeouts = {};
-let socket;
+    // Global state
+let privateChats = [], groupChats = [], selectedMembers = [], searchTimeouts = {}, currentUserId = null;
+let connectedRooms = new Set(), reconnectAttempts = 0, maxReconnectAttempts = 5;
 
 // API endpoints
 const API = {
@@ -179,25 +176,36 @@ const API = {
     groupChats: '/group/',
     joinGroup: '/group-join/',
     searchUsers: '/search/',
-    login: '/api/token/'
+    login: '/api/token/',
+    userProfile: '/user/profile/'
 };
 
 // Utility functions
-const getCSRFToken = () => {
-    const match = document.cookie.match('(^|;)\\s*csrftoken\\s*=\\s*([^;]+)');
-    return match ? match.pop() : '';
+const getCSRFToken = () => (document.cookie.match('(^|;)\\s*csrftoken\\s*=\\s*([^;]+)') || [])[2] || '';
+const debounce = (func, delay) => (...args) => {
+    clearTimeout(searchTimeouts[func.name]);
+    searchTimeouts[func.name] = setTimeout(() => func.apply(this, args), delay);
 };
 
-const debounce = (func, delay) => {
-    return (...args) => {
-        clearTimeout(searchTimeouts[func.name]);
-        searchTimeouts[func.name] = setTimeout(() => func.apply(this, args), delay);
-    };
-};
 
-// Auth helper
+let isRefreshing = false;
+let refreshQueue = [];
+
 async function authFetch(url, options = {}, retry = true) {
-    const token = localStorage.getItem('access_token');
+    let token = localStorage.getItem('access_token');
+    
+    if (!token) {
+        console.log('No access token found, attempting to get new token');
+        const refreshed = await refreshToken();
+        if (!refreshed) {
+            const reloginSuccess = await promptReLoginWithRetry();
+            if (!reloginSuccess) {
+                throw new Error('Authentication failed');
+            }
+        }
+        token = localStorage.getItem('access_token');
+    }
+
     options.headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -205,23 +213,105 @@ async function authFetch(url, options = {}, retry = true) {
         ...options.headers
     };
 
-    const response = await fetch(url, options);
+    console.log(`Making request to: ${url}`);
     
-    if (response.status === 401 && retry) {
-        if (await refreshToken()) {
-            return authFetch(url, options, false);
+    try {
+        const response = await fetch(url, options);
+        
+        // Handle 401 (unauthorized) responses
+        if (response.status === 401 && retry) {
+            console.log('Token expired, attempting refresh');
+            
+            if (!isRefreshing) {
+                isRefreshing = true;
+                
+                try {
+                    const refreshed = await refreshToken();
+                    
+                    if (refreshed) {
+                        console.log('Token refreshed, retrying request');
+                        // Get the fresh token and update headers
+                        const newToken = localStorage.getItem('access_token');
+                        options.headers = {
+                            ...options.headers,
+                            'Authorization': `Bearer ${newToken}`
+                        };
+                        
+                        isRefreshing = false;
+                        
+                        // Process queued requests
+                        refreshQueue.forEach(cb => cb());
+                        refreshQueue = [];
+                        
+                        // Retry the original request with new token
+                        return authFetch(url, options, false);
+                    } else {
+                        // Token refresh failed, try re-login
+                        console.log('Token refresh failed, prompting re-login');
+                        const reloginSuccess = await promptReLoginWithRetry();
+                        
+                        if (reloginSuccess) {
+                            // Get the fresh token after re-login
+                            const newToken = localStorage.getItem('access_token');
+                            options.headers = {
+                                ...options.headers,
+                                'Authorization': `Bearer ${newToken}`
+                            };
+                            
+                            isRefreshing = false;
+                            
+                            // Process queued requests
+                            refreshQueue.forEach(cb => cb());
+                            refreshQueue = [];
+                            
+                            // Retry with new credentials
+                            return authFetch(url, options, false);
+                        } else {
+                            isRefreshing = false;
+                            refreshQueue.forEach(cb => cb());
+                            refreshQueue = [];
+                            throw new Error('Authentication failed after token refresh and re-login');
+                        }
+                    }
+                } catch (refreshError) {
+                    isRefreshing = false;
+                    refreshQueue.forEach(cb => cb());
+                    refreshQueue = [];
+                    throw refreshError;
+                }
+            } else {
+                // Another request is already refreshing, queue this one
+                return new Promise((resolve, reject) => {
+                    refreshQueue.push(() => {
+                        authFetch(url, options, false).then(resolve).catch(reject);
+                    });
+                });
+            }
         }
-        await promptReLogin();
+
+        // Check for other error status codes
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response;
+        
+    } catch (error) {
+        console.error('AuthFetch error:', error);
+        throw error;
     }
-    return response;
 }
 
 async function refreshToken() {
     const refresh = localStorage.getItem('refresh_token');
-    if (!refresh) return false;
+    if (!refresh) {
+        console.log('No refresh token available');
+        return false;
+    }
 
     try {
-        const response = await fetch('/api/token/refresh/', {
+        console.log('Attempting token refresh');
+        const response = await fetch('http://127.0.0.1:8000/api/token/refresh/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh })
@@ -230,69 +320,103 @@ async function refreshToken() {
         if (response.ok) {
             const data = await response.json();
             localStorage.setItem('access_token', data.access);
+            if (data.refresh) {
+                localStorage.setItem('refresh_token', data.refresh);
+            }
+            console.log('Token refreshed successfully');
             return true;
+        } else {
+            console.error('Token refresh failed:', response.status, response.statusText);
+            // Clear invalid tokens
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
         }
-    } catch (e) {
-        console.error('Token refresh failed', e);
+    } catch (error) {
+        console.error('Token refresh error:', error);
+        // Clear potentially corrupted tokens
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
     }
     return false;
 }
 
-async function promptReLogin() {
-    const username = prompt('Session expired. Enter username:');
-    const password = prompt('Enter password:');
-    if (!username || !password) return;
-
-    try {
-        const response = await fetch(API.login, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            localStorage.setItem('access_token', data.access);
-            localStorage.setItem('refresh_token', data.refresh);
+async function promptReLoginWithRetry(maxAttempts = 3) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const username = prompt(`Session expired. Please enter your username (Attempt ${attempt + 1}/${maxAttempts}):`);
+        const password = prompt('Enter your password:');
+        
+        if (!username || !password) {
+            console.log('User cancelled login');
+            return false;
         }
-    } catch (e) {
-        alert('Login failed.');
+
+        try {
+            console.log(`Login attempt ${attempt + 1} for user: ${username}`);
+            const response = await fetch('http://127.0.0.1:8000/api/token/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem('access_token', data.access);
+                localStorage.setItem('refresh_token', data.refresh);
+                localStorage.setItem('current_username', username);
+                console.log('Login successful');
+                return true;
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Login failed:', response.status, errorData);
+                alert(`Login failed: ${errorData.detail || 'Invalid credentials'}. Please try again.`);
+            }
+        } catch (error) {
+            console.error('Network error during login:', error);
+            alert('Network error during login. Please check your connection and try again.');
+        }
     }
+    
+    alert('Maximum login attempts exceeded. Please refresh the page and try again.');
+    return false;
 }
 
-// Chat loading functions
+
 async function loadChats() {
     try {
+        
         const [privateResponse, groupResponse] = await Promise.all([
             authFetch(API.privateChats),
             authFetch(API.groupChats)
         ]);
         
-        // Fix: Use Set to prevent duplicates based on chat ID
         const privateData = await privateResponse.json();
         const groupData = await groupResponse.json();
         
-        // Remove duplicates by creating a Map with ID as key
-        const uniquePrivateChats = new Map();
-        privateData.forEach(chat => {
-            uniquePrivateChats.set(chat.id, chat);
-        });
-        privateChats = Array.from(uniquePrivateChats.values());
+        // Remove duplicates and sort
+        privateChats = Array.from(new Map(privateData.map(chat => [chat.id, chat])).values());
+        groupChats = Array.from(new Map(groupData.map(chat => [chat.id, chat])).values());
         
-        const uniqueGroupChats = new Map();
-        groupData.forEach(chat => {
-            uniqueGroupChats.set(chat.id, chat);
-        });
-        groupChats = Array.from(uniqueGroupChats.values());
-        
+        sortChatsByTime();
         renderChats();
+        setupWebSockets();
     } catch (error) {
         console.error('Error loading chats:', error);
     }
 }
 
-// Render functions
+function sortChatsByTime() {
+    const sortByTime = (a, b) => {
+        const timeA = a.time ? new Date(a.time).getTime() : 0;
+        const timeB = b.time ? new Date(b.time).getTime() : 0;
+        return timeB - timeA;
+    };
+    
+    privateChats.sort(sortByTime);
+    groupChats.sort(sortByTime);
+}
+
 function renderChats() {
+    sortChatsByTime();
     renderChatList(privateChats, 'privateChatList', 'noPrivateChats', 'private');
     renderChatList(groupChats, 'groupChatList', 'noGroups', 'group');
     updateChatCounts();
@@ -309,30 +433,200 @@ function renderChatList(chats, listId, noChatsId, type) {
     }
     
     noChatsEl.style.display = 'none';
-    listEl.innerHTML = chats.map(chat => createChatItem(chat, type)).join('');
-}
-
-function createChatItem(chat, type) {
-    const displayName = type === 'private' ? chat.username : chat.name;
-    const clickHandler = type === 'private' ? `openPrivateChat(${chat.id})` : `openGroupChat(${chat.id})`;
+    const displayName = type === 'private' ? 'username' : 'name';
+    const clickHandler = type === 'private' ? 'openPrivateChat' : 'openGroupChat';
     
-    return `
+    listEl.innerHTML = chats.map(chat => `
         <div class="list-group-item list-group-item-action border-0 px-3 py-3" 
-             data-chat-id="${chat.id}" onclick="${clickHandler}">
+             data-chat-id="${chat.id}" onclick="${clickHandler}(${chat.id})">
             <div class="d-flex align-items-center">
                 <div class="flex-grow-1 min-width-0">
-                    <h6 class="mb-1 text-truncate">${displayName}</h6>
+                    <h6 class="mb-1 text-truncate">${chat[displayName]}</h6>
                     <p class="mb-0 text-muted text-truncate">${chat.lastMessage || ''}</p>
                 </div>
                 ${chat.unread > 0 ? `<span class="badge bg-primary rounded-pill">${chat.unread}</span>` : ''}
             </div>
         </div>
-    `;
+    `).join('');
 }
 
 function updateChatCounts() {
     document.getElementById('privateCount').textContent = privateChats.length;
     document.getElementById('groupCount').textContent = groupChats.length;
+}
+
+// WebSocket setup
+function setupWebSockets() {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsBaseUrl = `${wsProtocol}//${window.location.host}/ws`;
+    
+    [...privateChats, ...groupChats].forEach(chat => {
+        connectToSingleChatRoom(wsBaseUrl, chat.id);
+    });
+}
+
+function connectToSingleChatRoom(wsBaseUrl, chatId) {
+    try {
+        if (connectedRooms.has(chatId)) return;
+        
+        const socket = new WebSocket(`${wsBaseUrl}/chat/${chatId}/`);
+        
+        socket.onopen = () => {
+            console.log(`Connected to chat room ${chatId}`);
+            connectedRooms.add(chatId);
+            reconnectAttempts = 0;
+        };
+        
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleChatRoomMessage(data, chatId);
+        };
+        
+        socket.onclose = (event) => {
+            console.warn(`Chat room ${chatId} WebSocket closed:`, event.code, event.reason);
+            connectedRooms.delete(chatId);
+            setTimeout(() => handleRoomReconnect(wsBaseUrl, chatId), 1000);
+        };
+        
+        socket.onerror = (error) => {
+            console.error(`Chat room ${chatId} WebSocket error:`, error);
+        };
+        
+        if (!window.chatSockets) window.chatSockets = new Map();
+        window.chatSockets.set(chatId, socket);
+        
+    } catch (error) {
+        console.error(`Failed to connect to chat room ${chatId}:`, error);
+        setTimeout(() => handleRoomReconnect(wsBaseUrl, chatId), 1000);
+    }
+}
+
+function handleChatRoomMessage(data, chatId) {
+    console.log('Received message data:', data);
+    
+    const messageType = data.type || 'message';
+    const handlers = {
+        'message': () => handleRegularMessage(data, chatId),
+        'file_upload': () => handleFileMessage(data, chatId),
+        'file_sending': () => handleFileMessage(data, chatId),
+        'file_sent': () => handleFileCompletedMessage(data, chatId),
+        'file_completed': () => handleFileCompletedMessage(data, chatId),
+        'file_failed': () => handleFileFailedMessage(data, chatId)
+    };
+    
+    (handlers[messageType] || handlers['message'])();
+}
+
+function isMessageFromCurrentUser(data) {
+    const senderId = data.sender_id || data.sender || data.user_id || data.id;
+    const senderUsername = data.sender_username || data.username;
+    
+    if (currentUserId && senderId) {
+        return senderId === currentUserId || senderId.toString() === currentUserId.toString();
+    }
+    
+    if (senderUsername) {
+        const currentUsername = localStorage.getItem('current_username');
+        return senderUsername === currentUsername;
+    }
+    
+    return false;
+}
+
+function handleRegularMessage(data, chatId) {
+    const messageContent = data.message.text || '[New Message]';
+    console.log(data);
+    updateLastMessage(chatId, messageContent);
+    
+    if (!isMessageFromCurrentUser(data)) {
+        incrementUnreadCount(chatId);
+    }
+}
+
+function handleFileMessage(data, chatId) {
+    const username = data.sender_username || data.username || 'Someone';
+    const fileName = data.filename || data.file_name || 'file';
+    const lastMessage = `${username} is sending ${fileName}`;
+    
+    updateLastMessage(chatId, lastMessage);
+    
+    if (!isMessageFromCurrentUser(data)) {
+        incrementUnreadCount(chatId);
+    }
+}
+
+function handleFileCompletedMessage(data, chatId) {
+    const username = data.sender_username || data.username || 'Someone';
+    const fileName = data.filename || data.file_name || 'file';
+    const lastMessage = `${username} sent ${fileName}`;
+    
+    updateLastMessage(chatId, lastMessage);
+    
+    if (!isMessageFromCurrentUser(data)) {
+        incrementUnreadCount(chatId);
+    }
+}
+
+function handleFileFailedMessage(data, chatId) {
+    const username = data.sender_username || data.username || 'Someone';
+    const lastMessage = `${username} tried to send you a file`;
+    
+    updateLastMessage(chatId, lastMessage);
+    
+    if (!isMessageFromCurrentUser(data)) {
+        incrementUnreadCount(chatId);
+    }
+}
+
+function handleRoomReconnect(wsBaseUrl, chatId) {
+    if (reconnectAttempts < maxReconnectAttempts) {
+        reconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        
+        console.log(`Attempting to reconnect to chat room ${chatId} in ${delay}ms (attempt ${reconnectAttempts})`);
+        setTimeout(() => connectToSingleChatRoom(wsBaseUrl, chatId), delay);
+    } else {
+        console.error(`Max reconnection attempts reached for chat room ${chatId}`);
+    }
+}
+
+function connectToNewChatRoom(chatId) {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsBaseUrl = `${wsProtocol}//${window.location.host}/ws`;
+    connectToSingleChatRoom(wsBaseUrl, chatId);
+}
+
+function updateLastMessage(chatId, content) {
+    if (typeof content !== 'string') {
+        console.warn('Invalid content type for updateLastMessage:', typeof content, content);
+        content = String(content);
+    }
+    
+    let chat = [...privateChats, ...groupChats].find(c => c.id === chatId);
+
+    if (chat) {
+        chat.lastMessage = content;
+        chat.time = new Date().toISOString();
+        renderChats();
+    } else {
+        console.warn('Chat not found for ID:', chatId);
+    }
+}
+
+function incrementUnreadCount(chatId) {
+    let chat = [...privateChats, ...groupChats].find(c => c.id === chatId);
+    if (chat) {
+        chat.unread = (chat.unread || 0) + 1;
+        renderChats();
+    }
+}
+
+function updateUnreadCount(chatId, count) {
+    let chat = [...privateChats, ...groupChats].find(c => c.id === chatId);
+    if (chat) {
+        chat.unread = count;
+        renderChats();
+    }
 }
 
 // Search functions
@@ -343,13 +637,11 @@ const searchUsersForPrivateChat = debounce(async function(query) {
         return;
     }
 
-    // Filter existing chats
     const filteredChats = privateChats.filter(chat => 
         chat.username.toLowerCase().includes(query.toLowerCase())
     );
     renderChatList(filteredChats, 'privateChatList', 'noPrivateChats', 'private');
 
-    // Search for new users
     try {
         const response = await authFetch(`${API.searchUsers}?q=${encodeURIComponent(query)}&type=private`);
         const users = await response.json();
@@ -418,19 +710,18 @@ async function startNewPrivateChat(userId, userName) {
 
         const chat = await response.json();
         
-        // Check if chat already exists to prevent duplicates
         if (!privateChats.some(existingChat => existingChat.id === chat.id)) {
-            const newChat = {
+            privateChats.push({
                 id: chat.id,
                 username: userName,
                 lastMessage: 'Start a conversation...',
-                unread: 0
-            };
-            privateChats.unshift(newChat);
+                unread: 0,
+                time: new Date().toISOString()
+            });
             renderChats();
+            connectToNewChatRoom(chat.id);
         }
 
-        // Clear search
         document.getElementById('privateSearchResults').style.display = 'none';
         document.getElementById('privateSearchInput').value = '';
     } catch (error) {
@@ -459,15 +750,16 @@ async function joinGroupByCode(code) {
             return;
         }
 
-        // Check if group already exists to prevent duplicates
         if (!groupChats.some(existingGroup => existingGroup.id === data.id)) {
-            groupChats.unshift({
+            groupChats.push({
                 id: data.id,
                 name: data.name,
                 lastMessage: 'You joined the group',
-                unread: 0
+                unread: 0,
+                time: new Date().toISOString()
             });
             renderChats();
+            connectToNewChatRoom(data.id);
         }
 
         messageEl.innerHTML = `<div class="text-success"><i class="fas fa-check-circle me-2"></i>Successfully joined "${data.name}"!</div>`;
@@ -505,16 +797,17 @@ async function createGroup() {
         
         const newGroup = await response.json();
         
-        groupChats.unshift({
+        groupChats.push({
             id: newGroup.id || Date.now(),
             name: groupName,
             lastMessage: 'Group created',
-            unread: 0
+            unread: 0,
+            time: new Date().toISOString()
         });
         
         renderChats();
+        connectToNewChatRoom(newGroup.id || Date.now());
         
-        // Switch to groups tab and close modal
         new bootstrap.Tab(document.getElementById('groups-tab')).show();
         bootstrap.Modal.getInstance(document.getElementById('createGroupModal')).hide();
         resetGroupModal();
@@ -560,56 +853,19 @@ function resetGroupModal() {
 
 // Navigation
 function openPrivateChat(chatId) {
-    window.location.href = `/chat/${chatId}`;
+    window.location.href = `/chat-web/${chatId}`;
 }
 
 function openGroupChat(chatId) {
-    window.location.href = `/group/${chatId}`;
-}
-
-// WebSocket handling
-function initializeSocket() {
-    socket = new WebSocket('ws://localhost:PORT/ws/notifications/');
-
-    socket.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        if (data.type === 'new_message') {
-            handleIncomingMessage(data);
-        }
-    };
-
-    socket.onclose = function() {
-        console.warn('WebSocket closed. Reconnecting...');
-        setTimeout(initializeSocket, 3000);
-    };
-}
-
-function handleIncomingMessage(data) {
-    const { chat_type, chat_id, message, sender } = data;
-    const chatList = chat_type === 'private' ? privateChats : groupChats;
-    const chatIndex = chatList.findIndex(chat => chat.id === chat_id);
-
-    if (chatIndex !== -1) {
-        const chat = chatList[chatIndex];
-        chat.lastMessage = `${sender}: ${message}`;
-        chat.unread += 1;
-        
-        // Move to top
-        chatList.splice(chatIndex, 1);
-        chatList.unshift(chat);
-        
-        renderChats();
-    }
+    window.location.href = `/chat-web/${chatId}`;
 }
 
 // Event listeners setup
 function setupEventListeners() {
-    // Private search
     document.getElementById('privateSearchInput').addEventListener('input', function() {
         searchUsersForPrivateChat(this.value);
     });
 
-    // Group join
     const joinBtn = document.getElementById('joinGroupBtn');
     const codeInput = document.getElementById('groupCodeInput');
     
@@ -625,15 +881,12 @@ function setupEventListeners() {
         }
     });
 
-    // Member search
     document.getElementById('memberSearch').addEventListener('input', function() {
         searchMembers(this.value);
     });
 
-    // Create group
     document.getElementById('createGroupBtn').addEventListener('click', createGroup);
 
-    // Tab switching - clear inputs
     document.querySelectorAll('#chatTabs button[data-bs-toggle="tab"]').forEach(trigger => {
         trigger.addEventListener('shown.bs.tab', () => {
             document.getElementById('privateSearchInput').value = '';
@@ -643,7 +896,6 @@ function setupEventListeners() {
         });
     });
 
-    // Hide search results on outside click
     document.addEventListener('click', (e) => {
         const privateSearch = document.getElementById('privateSearchInput');
         const privateResults = document.getElementById('privateSearchResults');
@@ -659,16 +911,26 @@ function setupEventListeners() {
         }
     });
 
-    // Reset modal on close
     document.getElementById('createGroupModal').addEventListener('hidden.bs.modal', resetGroupModal);
 }
 
-// Initialize app
-document.addEventListener('DOMContentLoaded', function() {
+// Cleanup
+window.addEventListener('beforeunload', () => {
+    if (window.chatSockets) {
+        window.chatSockets.forEach(socket => {
+            if (socket.readyState === WebSocket.OPEN) socket.close();
+        });
+        window.chatSockets.clear();
+    }
+});
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
     loadChats();
     setupEventListeners();
-    initializeSocket();
 });
 </script>
+<div id="chat" data-chat-id="{{ chat_id }}"></div>
+
 </body>
 </html>

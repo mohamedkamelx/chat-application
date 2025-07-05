@@ -5,9 +5,8 @@ from django.contrib.auth import authenticate, login
 from django.urls import reverse
 from django.shortcuts import redirect
 from django.contrib.auth.models import User
-from .serializers import UserListSerializer
 from rest_framework.generics import ListAPIView
-
+from rest_framework.permissions import IsAdminUser
 
 # Create your views here.
 def register(request):
@@ -50,8 +49,3 @@ def login_v(request):
         else:
             return render(request,'login_page.html')
         
-
-
-class UserListView(ListAPIView):
-    queryset = User.objects.select_related('profile')
-    serializer_class = UserListSerializer

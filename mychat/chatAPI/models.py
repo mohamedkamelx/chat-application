@@ -20,3 +20,11 @@ class Message(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.CharField(max_length=200)
     read = models.BooleanField(default=False)
+
+
+class ReadMsg(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="read_group")
+    time = models.DateTimeField(auto_now_add=True,null=True)
+    class Meta:
+        unique_together = ('user', 'message')  

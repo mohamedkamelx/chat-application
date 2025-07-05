@@ -28,6 +28,13 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 
+SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = True
+
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -42,7 +49,7 @@ INSTALLED_APPS = [
     'chatAPI',
     'user_reg',
     'rest_framework',
-    'rest_framework.authentication'
+    'rest_framework.authentication',
 ]
 
 MIDDLEWARE = [
@@ -109,10 +116,21 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES":[
-        "rest_framework.authentication.SessionAuthentication"
-    ]
+        "rest_framework_simplejwt.authentication.JWTAuthentication"
+    ],
 }
 
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(seconds=10),
+    'REFRESH_TOKEN_LIFETIME': timedelta(hours=24), 
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 

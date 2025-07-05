@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from rest_framework.generics import ListCreateAPIView
 from rest_framework.views import APIView
-from .models import Chat, Group_pep, User, Message
+from .models import Chat, Group_pep, User, Message, ReadMsg
 from . import serializers
 from rest_framework.response import Response
 from rest_framework import permissions
@@ -14,6 +14,7 @@ from rest_framework import permissions
 def home(request):
     return render(request,'chat_app_homepage.html')
 
+from django.db.models import Max
 
 
 class Chats(ListCreateAPIView):
@@ -23,7 +24,7 @@ class Chats(ListCreateAPIView):
         return Chat.objects.filter(is_private=True, participate=self.request.user).prefetch_related(
                     'participate',
                     'message_set',
-                ).order_by('-message_set__time')
+                ).annotate(last_msg_time=Max("message_set__time"))
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
     def post(self, request, *args, **kwargs):
@@ -35,7 +36,7 @@ class Groups(ListCreateAPIView):
     serializer_class = serializers.GroupSerializer
 
     def get_queryset(self):
-        return Group_pep.objects.filter(participate=self.request.user)
+        return Group_pep.objects.filter(participate=self.request.user).prefetch_related('message_set__read_group').annotate(last_msg_time=Max("message_set__time"))
     
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
@@ -82,22 +83,21 @@ class SearchView(APIView):
         
 
 class MessagesAPI(APIView):
-    def get(self,request, chat_id):
+    def get(self, request, chat_id):
         mychat = Chat.objects.get(id=chat_id)
-        messages = Message.objects.filter(chat=mychat)
-        serializer = serializers.MessageSerializer(messages,many=True, context={'request': request})
-        Message.objects.filter(chat=mychat).update(read=True)
-        return Response(serializer.data)
-    
-    def post(self,request):
-        serializer = serializers.MessageSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"success":True}, status=200)
-        else:return Response({"success":False}, status=200)
 
+        if mychat.is_private:
+            messages = Message.objects.filter(chat=mychat)
+            messages.update(read=True)
+            
+        messages = Message.objects.filter(chat=mychat).prefetch_related('read_group')
+        for msg in messages:
+            ReadMsg.objects.get_or_create(user=request.user, message=msg)
+
+        serializer = serializers.MyChat(mychat, context={'request': request})
+        return Response(serializer.data)
 
 
 @login_required(login_url='/user/login/')
-def messages(request):
-    return render(request,'chat_app_homepage.html')
+def messages(request,chat_id):
+    return render(request,'messager.html',context={'chatid':chat_id})

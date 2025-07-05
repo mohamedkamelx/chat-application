@@ -3,356 +3,856 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Messages</title>
+    <title>Chat App</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        .online-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+        }
+        .online-status.online {
+            background-color: #28a745;
+        }
+        .online-status.offline {
+            background-color: #dc3545;
+        }
+        .avatar-container {
+            position: relative;
+            display: inline-block;
+        }
+        .message-wrapper {
+            position: relative;
+        }
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            min-width: 150px;
+        }
+        .context-menu-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .context-menu-item:hover {
+            background-color: #f8f9fa;
+        }
+        .context-menu-item:last-child {
+            border-bottom: none;
+        }
+        .file-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head><body class="bg-light">
+    <a href="{% url 'home' %}" class="position-absolute top-0 start-0 m-3 text-decoration-none text-secondary" style="z-index: 1050;">
+        <i class="bi bi-house-door-fill fs-4"></i>
+    </a>
+
+
     <div class="container-fluid h-100">
         <div class="row h-100">
-            <!-- Chat Header -->
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center">
-                            <div class="position-relative me-3">
-                                <i class="fas fa-user-circle fa-2x text-secondary"></i>
-                                <span id="onlineStatus" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary">
-                                    <span class="visually-hidden">offline</span>
-                                </span>
+
+            <!-- Chat Container -->
+            <div class="col-12 col-md-8 offset-md-2 col-lg-6 offset-lg-3 h-100 d-flex flex-column p-0">
+
+                <!-- Chat Header -->
+                <div class="bg-white border-bottom p-3 shadow-sm">
+                    <div class="d-flex align-items-center">
+                        <div class="avatar-container me-3">
+                            <div class="avatar bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <i class="bi bi-person-fill text-white"></i>
                             </div>
-                            <div>
-                                <h6 class="mb-0" id="chatTitle">Chat</h6>
-                                <small class="text-muted" id="onlineText">Offline</small>
-                            </div>
+                            <div class="online-status" id="onlineStatus"></div>
+                        </div>
+                        <div>
+                            <h6 class="mb-0" id="chatName">Loading...</h6>
+                            <small class="text-muted" id="statusText">Loading...</small>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Messages Container -->
-            <div class="col-12" style="height: calc(100vh - 200px);">
-                <div class="card h-100">
-                    <div class="card-body p-3 overflow-auto" id="messagesContainer">
-                        <!-- Messages will be loaded here -->
-                        <div id="loadingSpinner" class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
+                <!-- Messages Container -->
+                <div class="flex-grow-1 overflow-auto p-3" id="messagesContainer" style="max-height: calc(100vh - 140px);">
+                    <div class="d-flex justify-content-center mb-3">
+                        <div class="spinner-border text-primary" role="status" id="loadingSpinner">
+                            <span class="visually-hidden">Loading...</span>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Message Input -->
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body p-3">
-                        <form id="messageForm">
+                <!-- Message Input -->
+                <div class="bg-white border-top p-3">
+                    <div class="row g-2">
+                        <div class="col">
                             <div class="input-group">
-                                <input type="file" class="d-none" id="fileInput" multiple>
-                                <button class="btn btn-outline-secondary" type="button" id="attachBtn">
-                                    <i class="fas fa-paperclip"></i>
+                                <input type="text" class="form-control border-0 bg-light" placeholder="Type a message..." id="messageInput">
+                                <input type="file" class="d-none" id="fileInput" accept="*/*">
+                                <button class="btn btn-light" type="button" id="fileBtn">
+                                    <i class="bi bi-paperclip"></i>
                                 </button>
-                                <input type="text" class="form-control" id="messageInput" placeholder="Type a message..." autocomplete="off">
-                                <button class="btn btn-primary" type="submit" id="sendBtn">
-                                    <i class="fas fa-paper-plane"></i>
+                                <button class="btn btn-primary" type="button" id="sendBtn">
+                                    <i class="bi bi-send-fill"></i>
                                 </button>
                             </div>
-                        </form>
-                        <!-- File Preview Area -->
-                        <div id="filePreview" class="mt-2 d-none"></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap JS -->
+    <!-- File Upload Modal -->
+    <div class="modal fade" id="fileModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Send File</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="filePreview" class="mb-3"></div>
+                    <div class="mb-3">
+                        <label class="form-label">Add a message (optional)</label>
+                        <input type="text" class="form-control" id="fileMessage" placeholder="Type a message...">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="sendFileBtn">Send File</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Read By Modal -->
+    <div class="modal fade" id="readByModal" tabindex="-1">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Read By</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="readByList">
+                        <!-- Read by list will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-    
+ <script>window.CHAT_ID = {{ chatid }};</script>
+
     <script>
-class ChatManager {
-    constructor() {
-        this.chatId = this.getChatIdFromUrl();
-        this.socket = null;
-        this.messages = [];
-        this.currentUser = null;
-        this.socketUrl = 'ws://localhost:8000'; // SET YOUR WEBSOCKET URL HERE
-        this.apiUrl = '/chat'; // SET YOUR API BASE URL HERE
-        
-        this.init();
-    }
+const getCSRFToken = () => (document.cookie.match('(^|;)\\s*csrftoken\\s*=\\s*([^;]+)') || [])[2] || '';
 
-    getChatIdFromUrl() {
-        // Extract chat_id from URL - adjust based on your URL structure
-        const path = window.location.pathname;
-        const match = path.match(/\/chat-page\/(\d+)/);
-        return match ? parseInt(match[1]) : null;
-    }
-
-    init() {
-        this.bindEvents();
-        this.loadMessages();
-        this.initWebSocket();
-    }
-
-    bindEvents() {
-        // Message form submission
-        document.getElementById('messageForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.sendMessage();
-        });
-
-        // File attachment
-        document.getElementById('attachBtn').addEventListener('click', () => {
-            document.getElementById('fileInput').click();
-        });
-
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            this.handleFileSelection(e.target.files);
-        });
+let isRefreshing = false;
+let refreshQueue = [];
 
 
-        // Enter key to send message
-        document.getElementById('messageInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.sendMessage();
+async function authFetch(url, options = {}, retry = true) {
+    // First check if we have a token
+    let token = localStorage.getItem('access_token');
+    
+    if (!token) {
+        console.log('No access token found, attempting to get new token');
+        const refreshed = await refreshToken();
+        if (!refreshed) {
+            const reloginSuccess = await promptReLoginWithRetry();
+            if (!reloginSuccess) {
+                throw new Error('Authentication failed');
             }
-        });
+        }
+        token = localStorage.getItem('access_token');
     }
 
-    async loadMessages() {
-        if (!this.chatId) {
-            console.error('No chat ID found');
-            return;
+    // Set up headers with fresh token
+    options.headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCSRFToken(),
+        ...options.headers
+    };
+
+    console.log(`Making request to: ${url}`);
+    
+    try {
+        const response = await fetch(url, options);
+        
+        // Handle 401 (unauthorized) responses
+        if (response.status === 401 && retry) {
+            console.log('Token expired, attempting refresh');
+            
+            if (!isRefreshing) {
+                isRefreshing = true;
+                
+                try {
+                    const refreshed = await refreshToken();
+                    
+                    if (refreshed) {
+                        console.log('Token refreshed, retrying request');
+                        // Get the fresh token and update headers
+                        const newToken = localStorage.getItem('access_token');
+                        options.headers = {
+                            ...options.headers,
+                            'Authorization': `Bearer ${newToken}`
+                        };
+                        
+                        isRefreshing = false;
+                        
+                        // Process queued requests
+                        refreshQueue.forEach(cb => cb());
+                        refreshQueue = [];
+                        
+                        // Retry the original request with new token
+                        return authFetch(url, options, false);
+                    } else {
+                        // Token refresh failed, try re-login
+                        console.log('Token refresh failed, prompting re-login');
+                        const reloginSuccess = await promptReLoginWithRetry();
+                        
+                        if (reloginSuccess) {
+                            // Get the fresh token after re-login
+                            const newToken = localStorage.getItem('access_token');
+                            options.headers = {
+                                ...options.headers,
+                                'Authorization': `Bearer ${newToken}`
+                            };
+                            
+                            isRefreshing = false;
+                            
+                            // Process queued requests
+                            refreshQueue.forEach(cb => cb());
+                            refreshQueue = [];
+                            
+                            // Retry with new credentials
+                            return authFetch(url, options, false);
+                        } else {
+                            isRefreshing = false;
+                            refreshQueue.forEach(cb => cb());
+                            refreshQueue = [];
+                            throw new Error('Authentication failed after token refresh and re-login');
+                        }
+                    }
+                } catch (refreshError) {
+                    isRefreshing = false;
+                    refreshQueue.forEach(cb => cb());
+                    refreshQueue = [];
+                    throw refreshError;
+                }
+            } else {
+                // Another request is already refreshing, queue this one
+                return new Promise((resolve, reject) => {
+                    refreshQueue.push(() => {
+                        authFetch(url, options, false).then(resolve).catch(reject);
+                    });
+                });
+            }
+        }
+
+        // Check for other error status codes
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response;
+        
+    } catch (error) {
+        console.error('AuthFetch error:', error);
+        throw error;
+    }
+}
+
+async function refreshToken() {
+    const refresh = localStorage.getItem('refresh_token');
+    if (!refresh) {
+        console.log('No refresh token available');
+        return false;
+    }
+
+    try {
+        console.log('Attempting token refresh');
+        const response = await fetch('http://127.0.0.1:8000/api/token/refresh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('access_token', data.access);
+            if (data.refresh) {
+                localStorage.setItem('refresh_token', data.refresh);
+            }
+            console.log('Token refreshed successfully');
+            return true;
+        } else {
+            console.error('Token refresh failed:', response.status, response.statusText);
+            // Clear invalid tokens
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+        }
+    } catch (error) {
+        console.error('Token refresh error:', error);
+        // Clear potentially corrupted tokens
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+    }
+    return false;
+}
+
+async function promptReLoginWithRetry(maxAttempts = 3) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const username = prompt(`Session expired. Please enter your username (Attempt ${attempt + 1}/${maxAttempts}):`);
+        const password = prompt('Enter your password:');
+        
+        if (!username || !password) {
+            console.log('User cancelled login');
+            return false;
         }
 
         try {
-            const response = await fetch(`${this.apiUrl}/${this.chatId}`);
-            const data = await response.json();
-            this.messages = data;
-            this.renderMessages();
-            document.getElementById('loadingSpinner').classList.add('d-none');
+            console.log(`Login attempt ${attempt + 1} for user: ${username}`);
+            const response = await fetch('http://127.0.0.1:8000/api/token/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem('access_token', data.access);
+                localStorage.setItem('refresh_token', data.refresh);
+                localStorage.setItem('current_username', username);
+                console.log('Login successful');
+                return true;
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Login failed:', response.status, errorData);
+                alert(`Login failed: ${errorData.detail || 'Invalid credentials'}. Please try again.`);
+            }
         } catch (error) {
-            console.error('Error loading messages:', error);
-            document.getElementById('loadingSpinner').innerHTML = 
-                '<div class="alert alert-danger">Failed to load messages</div>';
+            console.error('Network error during login:', error);
+            alert('Network error during login. Please check your connection and try again.');
         }
+    }
+    
+    alert('Maximum login attempts exceeded. Please refresh the page and try again.');
+    return false;
+}
+
+class ChatApp {
+    constructor() {
+        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+
+        this.chatId = {{ chatid }};
+
+        this.myId = 0;
+        this.chatName = '';
+        this.messages = [];
+        this.chatSocket = null;
+        this.fileSocket = null;
+        this.roomCode = 'room13';
+        this.apiBaseUrl = '';
+        this.wsBaseUrl =`${wsScheme}://${window.location.host}/ws`;
+        this.roomCode = `${this.chatId}`;
+        this.isOnline = false;
+        this.lastSeen = null;
+        this.contextMenu = null;
+
+        this.initializeElements();
+        this.attachEventListeners();
+        this.loadChat();
+        this.connectWebSockets();
+    }
+
+    initializeElements() {
+        this.messagesContainer = document.getElementById('messagesContainer');
+        this.messageInput = document.getElementById('messageInput');
+        this.sendBtn = document.getElementById('sendBtn');
+        this.fileBtn = document.getElementById('fileBtn');
+        this.fileInput = document.getElementById('fileInput');
+        this.chatNameEl = document.getElementById('chatName');
+        this.statusText = document.getElementById('statusText');
+        this.onlineStatus = document.getElementById('onlineStatus');
+        this.loadingSpinner = document.getElementById('loadingSpinner');
+        this.fileModal = new bootstrap.Modal(document.getElementById('fileModal'));
+        this.readByModal = new bootstrap.Modal(document.getElementById('readByModal'));
+        this.sendFileBtn = document.getElementById('sendFileBtn');
+        this.filePreview = document.getElementById('filePreview');
+        this.fileMessage = document.getElementById('fileMessage');
+        this.readByList = document.getElementById('readByList');
+    }
+
+    attachEventListeners() {
+        this.sendBtn.addEventListener('click', () => this.sendMessage());
+        this.messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.sendMessage();
+        });
+        
+        this.fileBtn.addEventListener('click', () => this.handleFileButtonClick());
+        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        this.sendFileBtn.addEventListener('click', () => this.sendFile());
+
+        // Add right-click context menu
+        this.messagesContainer.addEventListener('contextmenu', (e) => this.handleContextMenu(e));
+        document.addEventListener('click', () => this.hideContextMenu());
+    }
+
+    async loadChat() {
+        try {
+            const response = await authFetch(`${this.apiBaseUrl}/chat/${this.chatId}`);
+            if (!response.ok) throw new Error('Failed to load chat');
+            
+            const data = await response.json();
+            this.myId = data.myid;
+            this.chatName = data.chatname;
+            this.messages = data.messages || [];
+            this.isOnline = data.is_online;
+            this.lastSeen = data.lastseen;
+            
+            this.chatNameEl.textContent = this.chatName;
+            this.updateOnlineStatus();
+            this.renderMessages();
+            this.hideLoading();
+        } catch (error) {
+            console.error('Error loading chat:', error);
+            this.hideLoading();
+            this.showError('Failed to load chat');
+        }
+    }
+
+
+updateOnlineStatus() {
+    if (this.isOnline) {
+        this.onlineStatus.className = 'online-status online';
+        this.statusText.textContent = 'Online';
+        this.fileBtn.disabled = false;
+        this.fileBtn.classList.remove('file-disabled');
+    } else {
+        this.onlineStatus.className = 'online-status offline';
+        if (this.lastSeen) {
+            const lastSeenDate = new Date(this.lastSeen);
+            const now = new Date();
+            const diffTime = Math.abs(now - lastSeenDate);
+            const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffHours < 24) {
+                if (diffHours === 0) {
+                    this.statusText.textContent = 'Last seen just now';
+                } else if (diffHours === 1) {
+                    this.statusText.textContent = 'Last seen 1 hour ago';
+                } else {
+                    this.statusText.textContent = `Last seen ${diffHours} hours ago`;
+                }
+            } else if (diffDays === 1) {
+                // Exactly 1 day
+                this.statusText.textContent = 'Last seen yesterday';
+            } else if (diffDays < 7) {
+                // Less than a week
+                this.statusText.textContent = `Last seen ${diffDays} days ago`;
+            } else {
+                // More than a week - show date
+                this.statusText.textContent = `Last seen ${lastSeenDate.toLocaleDateString()}`;
+            }
+        } else {
+            this.statusText.textContent = 'Offline';
+        }
+        this.fileBtn.disabled = true;
+        this.fileBtn.classList.add('file-disabled');
+    }
+}
+
+    handleFileButtonClick() {
+        if (!this.isOnline) {
+            this.showError('Cannot send files when the other user is offline');
+            return;
+        }
+        this.fileInput.click();
+    }
+
+    handleContextMenu(e) {
+        const messageEl = e.target.closest('.message-wrapper');
+        if (!messageEl) return;
+
+        e.preventDefault();
+        
+        const messageIndex = Array.from(this.messagesContainer.children).findIndex(child => 
+            child.querySelector('.message-wrapper') === messageEl
+        );
+        
+        if (messageIndex === -1) return;
+
+        const message = this.messages[messageIndex];
+        if (!message || message.sender !== this.myId) return; // Only show context menu for own messages
+
+        this.showContextMenu(e.clientX, e.clientY, message);
+    }
+
+    showContextMenu(x, y, message) {
+        this.hideContextMenu();
+
+        this.contextMenu = document.createElement('div');
+        this.contextMenu.className = 'context-menu';
+        this.contextMenu.style.left = `${x}px`;
+        this.contextMenu.style.top = `${y}px`;
+
+        const readByItem = document.createElement('div');
+        readByItem.className = 'context-menu-item';
+        readByItem.innerHTML = '<i class="bi bi-eye me-2"></i>Read by';
+        readByItem.onclick = () => {
+            this.showReadByModal(message);
+            this.hideContextMenu();
+        };
+
+        this.contextMenu.appendChild(readByItem);
+        document.body.appendChild(this.contextMenu);
+
+        // Adjust position if menu goes off screen
+        const rect = this.contextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            this.contextMenu.style.left = `${x - rect.width}px`;
+        }
+        if (rect.bottom > window.innerHeight) {
+            this.contextMenu.style.top = `${y - rect.height}px`;
+        }
+    }
+
+    hideContextMenu() {
+        if (this.contextMenu) {
+            this.contextMenu.remove();
+            this.contextMenu = null;
+        }
+    }
+    
+    
+showReadByModal(message) {
+    this.readByList.innerHTML = '';
+
+    console.log('Read by raw object:', message.read_by);
+
+    if (!message.read_by || Object.keys(message.read_by).length === 0) {
+        this.readByList.innerHTML = '<p class="text-muted mb-0">Not read yet</p>';
+        return;
+    }
+
+    Object.entries(message.read_by).forEach(([username, timestamp]) => {
+        const readerName = username || 'Unknown';
+        const readerTime = timestamp ? new Date(timestamp).toLocaleString() : '';
+
+        const readerEl = document.createElement('div');
+        readerEl.className = 'd-flex align-items-center mb-2';
+        readerEl.innerHTML = `
+            <div class="avatar bg-secondary rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 30px; height: 30px;">
+                <i class="bi bi-person-fill text-white" style="font-size: 0.8rem;"></i>
+            </div>
+            <div>
+                <div class="fw-medium">${this.escapeHtml(readerName)}</div>
+                ${readerTime ? `<small class="text-muted">${readerTime}</small>` : ''}
+            </div>
+        `;
+        this.readByList.appendChild(readerEl);
+    });
+
+    this.readByModal.show();
+}
+
+
+    hideLoading() {
+        this.loadingSpinner.style.display = 'none';
     }
 
     renderMessages() {
-        const container = document.getElementById('messagesContainer');
-        const spinner = document.getElementById('loadingSpinner');
-        
-        // Clear existing messages (keep spinner)
-        container.innerHTML = '';
-        container.appendChild(spinner);
-
-        this.messages.forEach(message => {
-            const messageEl = this.createMessageElement(message);
-            container.insertBefore(messageEl, spinner);
-        });
-
-        // Scroll to bottom
-        container.scrollTop = container.scrollHeight;
+        this.messagesContainer.innerHTML = '';
+        this.messages.forEach(message => this.renderMessage(message));
+        this.scrollToBottom();
     }
 
-    createMessageElement(message) {
-        const messageDiv = document.createElement('div');
-        const isCurrentUser = message.sender === this.currentUser;
-        
-        messageDiv.className = `d-flex mb-3 ${isCurrentUser ? 'justify-content-end' : 'justify-content-start'}`;
-        
-        const time = new Date(message.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        
-        messageDiv.innerHTML = `
-            <div class="message-bubble ${isCurrentUser ? 'bg-primary text-white' : 'bg-white border'} p-3 rounded-3 shadow-sm" style="max-width: 70%;">
-                ${!isCurrentUser ? `<div class="fw-bold text-primary mb-1">${message.username}</div>` : ''}
-                <div class="message-text">${this.escapeHtml(message.text)}</div>
-                <div class="message-time ${isCurrentUser ? 'text-white-50' : 'text-muted'} mt-1" style="font-size: 0.8rem;">
-                    ${time}
-                    ${message.read ? '<i class="fas fa-check-double ms-1"></i>' : '<i class="fas fa-check ms-1"></i>'}
+    renderMessage(message) {
+        const isMyMessage = message.sender === this.myId;
+        const messageEl = document.createElement('div');
+        messageEl.className = `d-flex mb-3 ${isMyMessage ? 'justify-content-end' : 'justify-content-start'}`;
+
+        // Safe date parsing
+        let time = 'Invalid Date';
+        if (message.time) {
+            try {
+                const date = new Date(message.time);
+                if (!isNaN(date.getTime())) {
+                    time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+            } catch (e) {
+                console.error('Error parsing date:', message.time, e);
+            }
+        }
+
+        messageEl.innerHTML = `
+            <div class="message-wrapper" style="max-width: 70%;">
+                ${!isMyMessage ? `<small class="text-muted d-block mb-1">${this.escapeHtml(message.sendername || message.sender_username )}</small>` : ''}
+
+                <div class="p-3 rounded-3 ${isMyMessage ? 'bg-primary text-white' : 'bg-white border'}">
+                    ${message.file ? this.renderFileContent(message) : ''}
+                    ${message.text ? `<div class="message-text">${this.escapeHtml(message.text)}</div>` : ''}
+                    <small class="d-block mt-1 ${isMyMessage ? 'text-white-50' : 'text-muted'}" style="font-size: 0.75rem;">
+                        ${time}
+                        ${isMyMessage ? this.getReadStatus(message) : ''}
+                    </small>
                 </div>
             </div>
         `;
-        
-        return messageDiv;
+
+        this.messagesContainer.appendChild(messageEl);
     }
 
-    sendMessage() {
-        const messageInput = document.getElementById('messageInput');
-        const text = messageInput.value.trim();
-        
-        if (!text && !this.selectedFiles) return;
-
-        const messageData = {
-            chat_id: this.chatId,
-            text: text,
-            sender: this.currentUser
-        };
-
-        // Send via WebSocket
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            if (this.selectedFiles && this.selectedFiles.length > 0) {
-                // Handle file sending
-                this.sendFiles(messageData);
-            } else {
-                this.socket.send(JSON.stringify({
-                    type: 'message',
-                    data: messageData
-                }));
-            }
+    getReadStatus(message) {
+        if (message.read_by && message.read_by.length > 0) {
+            return '<i class="bi bi-check2-all ms-1" title="Read"></i>';
+        } else if (message.read) {
+            return '<i class="bi bi-check2 ms-1" title="Delivered"></i>';
         } else {
-            // Fallback to API if WebSocket not available
-            this.sendMessageViaAPI(messageData);
-        }
-
-        messageInput.value = '';
-        this.clearFileSelection();
-    }
-
-    async sendMessageViaAPI(messageData) {
-        try {
-            const response = await fetch(this.apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': this.getCSRFToken()
-                },
-                body: JSON.stringify(messageData)
-            });
-            
-            const result = await response.json();
-            if (result.success) {
-                this.loadMessages(); // Refresh messages
-            }
-        } catch (error) {
-            console.error('Error sending message:', error);
+            return '<i class="bi bi-check ms-1" title="Sent"></i>';
         }
     }
 
-    initWebSocket() {
+    renderFileContent(message) {
+        if (!message.file) return '';
+        
+        const fileType = message.file.type || '';
+        const fileName = message.file.name || 'File';
+        
+        if (fileType.startsWith('image/')) {
+            return `
+                <div class="mb-2">
+                    <img src="data:${fileType};base64,${message.file.data}" 
+                         class="img-fluid rounded" style="max-width: 200px; max-height: 200px;">
+                </div>
+            `;
+        } else {
+            return `
+                <div class="d-flex align-items-center mb-2 p-2 bg-light rounded">
+                    <i class="bi bi-file-earmark me-2"></i>
+                    <span class="text-truncate">${fileName}</span>
+                    <a href="data:${fileType};base64,${message.file.data}" 
+                       download="${fileName}" class="btn btn-sm btn-outline-primary ms-auto">
+                        <i class="bi bi-download"></i>
+                    </a>
+                </div>
+            `;
+        }
+    }
+
+    connectWebSockets() {
+        this.connectChatSocket();
+        this.connectFileSocket();
+    }
+
+    connectChatSocket() {
         try {
-            this.socket = new WebSocket(`${this.socketUrl}/ws/chat/${this.chatId}/`);
+            const chatUrl = `${this.wsBaseUrl}/chat/${this.roomCode}/`;
+            this.chatSocket = new WebSocket(chatUrl);
             
-            this.socket.onopen = () => {
-                console.log('WebSocket connected');
-                this.updateConnectionStatus(true);
+            this.chatSocket.onopen = () => {
+                console.log('Chat WebSocket connected');
             };
-
-            this.socket.onmessage = (event) => {
+            
+            this.chatSocket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                this.handleWebSocketMessage(data);
-            };
+                // Handle the nested message structure from your server
+                const message = data.message || data;
+                console.log('cookie');
+                console.log(document.cookie);
+                console.log('cookie');
 
-            this.socket.onclose = () => {
-                console.log('WebSocket disconnected');
-                this.updateConnectionStatus(false);
-                // Attempt to reconnect after 3 seconds
-                setTimeout(() => this.initWebSocket(), 3000);
+                this.handleNewMessage(message);
             };
-
-            this.socket.onerror = (error) => {
-                console.error('WebSocket error:', error);
+            
+            this.chatSocket.onclose = () => {
+                console.log('Chat WebSocket disconnected');
+                setTimeout(() => this.connectChatSocket(), 3000);
+            };
+            
+            this.chatSocket.onerror = (error) => {
+                console.error('Chat WebSocket error:', error);
             };
         } catch (error) {
-            console.error('Failed to initialize WebSocket:', error);
+            console.error('Failed to connect Chat WebSocket:', error);
         }
     }
 
-    handleWebSocketMessage(data) {
-        switch (data.type) {
-            case 'message':
-                this.messages.push(data.message);
-                this.renderMessages();
-                break;
-            case 'online_status':
-                this.updateOnlineStatus(data.is_online, data.username);
-                break;
-            case 'typing':
-                this.handleTypingIndicator(data);
-                break;
-            default:
-                console.log('Unknown message type:', data.type);
+    connectFileSocket() {
+        try {
+            const fileUrl = `${this.wsBaseUrl}/file/${this.roomCode}/`;
+            this.fileSocket = new WebSocket(fileUrl);
+            
+            this.fileSocket.onopen = () => {
+                console.log('File WebSocket connected');
+            };
+            
+            this.fileSocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                // Handle the nested message structure from your server
+                const message = data.message || data;
+                this.handleNewMessage(message);
+            };
+            
+            this.fileSocket.onclose = () => {
+                console.log('File WebSocket disconnected');
+                setTimeout(() => this.connectFileSocket(), 3000);
+            };
+            
+            this.fileSocket.onerror = (error) => {
+                console.error('File WebSocket error:', error);
+            };
+        } catch (error) {
+            console.error('Failed to connect File WebSocket:', error);
         }
     }
 
-    updateOnlineStatus(isOnline, username) {
-        const statusBadge = document.getElementById('onlineStatus');
-        const statusText = document.getElementById('onlineText');
-        
-        if (isOnline) {
-            statusBadge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-success';
-            statusText.textContent = 'Online';
-        } else {
-            statusBadge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary';
-            statusText.textContent = 'Offline';
-        }
-    }
+    handleNewMessage(message) {
+        // Check for duplicate messages by comparing message content and timestamp
+        const isDuplicate = this.messages.some(existingMessage => {
+            return existingMessage.sender === message.sender &&
+                   existingMessage.text === message.text &&
+                   Math.abs(new Date(existingMessage.time) - new Date(message.time)) < 5000;
+        });
 
-    updateConnectionStatus(connected) {
-        // You can add visual indicators for connection status here
-        console.log('Connection status:', connected ? 'Connected' : 'Disconnected');
-    }
-
-    handleFileSelection(files) {
-        this.selectedFiles = Array.from(files);
-        this.renderFilePreview();
-    }
-
-    renderFilePreview() {
-        const preview = document.getElementById('filePreview');
-        if (!this.selectedFiles || this.selectedFiles.length === 0) {
-            preview.classList.add('d-none');
+        if (isDuplicate) {
+            console.log('Duplicate message detected, skipping:', message);
             return;
         }
 
-        preview.classList.remove('d-none');
-        preview.innerHTML = '';
-
-        this.selectedFiles.forEach((file, index) => {
-            const fileDiv = document.createElement('div');
-            fileDiv.className = 'badge bg-secondary me-2 mb-2 p-2';
-            fileDiv.innerHTML = `
-                ${file.name} (${this.formatFileSize(file.size)})
-                <button type="button" class="btn-close btn-close-white ms-2" onclick="chatManager.removeFile(${index})"></button>
-            `;
-            preview.appendChild(fileDiv);
-        });
+        this.messages.push(message);
+        this.renderMessage(message);
+        this.scrollToBottom();
     }
 
-    removeFile(index) {
-        this.selectedFiles.splice(index, 1);
-        this.renderFilePreview();
-    }
-
-    clearFileSelection() {
-        this.selectedFiles = null;
-        document.getElementById('fileInput').value = '';
-        document.getElementById('filePreview').classList.add('d-none');
-    }
-
-    sendFiles(messageData) {
-        // Handle file sending via WebSocket
-        // You'll need to implement file chunking for large files
-        const reader = new FileReader();
+    sendMessage() {
+        const text = this.messageInput.value.trim();
+        if (!text || !this.chatSocket || this.chatSocket.readyState !== WebSocket.OPEN) return;
         
-        this.selectedFiles.forEach(file => {
-            reader.onload = (e) => {
-                this.socket.send(JSON.stringify({
-                    type: 'file',
-                    data: {
-                        ...messageData,
-                        file_name: file.name,
-                        file_type: file.type,
-                        file_size: file.size,
-                        file_data: e.target.result.split(',')[1] // Base64 data
-                    }
-                }));
+        const message = {
+            type: 'message',
+            chat_id: this.chatId,
+            room_code: this.roomCode,
+            sender: this.myId,
+            text: text,
+            time: new Date().toISOString(),
+            read_by: [],
+            read: false
+        };
+        
+        // Send through WebSocket first, don't add locally
+        this.chatSocket.send(JSON.stringify(message));
+        this.messageInput.value = '';
+        
+        // The message will be added when we receive it back from the server
+    }
+
+    handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        if (!this.isOnline) {
+            this.showError('Cannot send files when the other user is offline');
+            return;
+        }
+        
+        this.showFilePreview(file);
+        this.fileModal.show();
+    }
+
+    showFilePreview(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const fileType = file.type;
+            let previewHtml = '';
+            
+            if (fileType.startsWith('image/')) {
+                previewHtml = `
+                    <div class="text-center">
+                        <img src="${e.target.result}" class="img-fluid rounded" style="max-height: 200px;">
+                        <p class="mt-2 mb-0"><strong>${file.name}</strong></p>
+                        <small class="text-muted">${this.formatFileSize(file.size)}</small>
+                    </div>
+                `;
+            } else {
+                previewHtml = `
+                    <div class="text-center">
+                        <i class="bi bi-file-earmark display-4 text-muted"></i>
+                        <p class="mt-2 mb-0"><strong>${file.name}</strong></p>
+                        <small class="text-muted">${this.formatFileSize(file.size)}</small>
+                    </div>
+                `;
+            }
+            
+            this.filePreview.innerHTML = previewHtml;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async sendFile() {
+        const file = this.fileInput.files[0];
+        const text = this.fileMessage.value.trim();
+        
+        if (!file || !this.fileSocket || this.fileSocket.readyState !== WebSocket.OPEN) return;
+        
+        if (!this.isOnline) {
+            this.showError('Cannot send files when the other user is offline');
+            return;
+        }
+        
+        try {
+            const base64 = await this.fileToBase64(file);
+            
+            const message = {
+                type: 'file',
+                chat_id: this.chatId,
+                room_code: this.roomCode,
+                sender: this.myId,
+                text: text,
+                file: {
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    data: base64.split(',')[1]
+                },
+                time: new Date().toISOString(),
+                read_by: [],
+                read: false
             };
+            
+            this.fileSocket.send(JSON.stringify(message));
+            
+            this.fileInput.value = '';
+            this.fileMessage.value = '';
+            this.fileModal.hide();
+            
+        } catch (error) {
+            console.error('Error sending file:', error);
+            this.showError('Failed to send file');
+        }
+    }
+
+    fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
             reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
         });
     }
 
@@ -364,26 +864,36 @@ class ChatManager {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    escapeHtml(unsafe) {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+    scrollToBottom() {
+        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
 
-    getCSRFToken() {
-        // Get CSRF token from Django
-        const token = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
-        return token || '';
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    showError(message) {
+        const errorEl = document.createElement('div');
+        errorEl.className = 'alert alert-danger alert-dismissible fade show';
+        errorEl.innerHTML = `
+            <strong>Error:</strong> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        this.messagesContainer.appendChild(errorEl);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (errorEl.parentNode) {
+                errorEl.remove();
+            }
+        }, 5000);
     }
 }
 
-// Initialize chat manager when page loads
-let chatManager;
 document.addEventListener('DOMContentLoaded', () => {
-    chatManager = new ChatManager();
+    new ChatApp();
 });
     </script>
 </body>

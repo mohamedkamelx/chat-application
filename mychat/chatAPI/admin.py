@@ -20,9 +20,30 @@ class GroupPepAdmin(admin.ModelAdmin):
     filter_horizontal = ('participate',)
     inlines = [MessageInline]
 
-# For individual message model (optional)
+
+
+from django.contrib import admin
+from .models import Message, ReadMsg, Chat
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class ReadMsgInline(admin.TabularInline):
+    model = ReadMsg
+    extra = 1
+    autocomplete_fields = ['user']
+
+
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
-    list_display = ['chat', 'sender', 'text', 'time', 'read']
+    list_display = ['chat', 'sender', 'text', 'time', 'read', 'seen_by']
     list_filter = ['read', 'time']
     search_fields = ['text', 'sender__username']
+    inlines = [ReadMsgInline]
+
+    def seen_by(self, obj):
+        return ", ".join([
+            f"{r.user.username} at {r.time.strftime('%Y-%m-%d %H:%M:%S')}" 
+            for r in obj.read_group.all()
+        ])
+    seen_by.short_description = 'Seen By (with time)'
