@@ -77,7 +77,6 @@ A full-featured real-time chat application built with Django, supporting both we
 | GET | `/chat/<int:chat_id>` | Get messages for specific chat |
 | GET | `/group/` | List all group chats |
 | POST | `/group/` | Create new group chat |
-| GET | `/group/<int:chat_id>` | Get messages for specific group |
 
 ### Additional Features
 | Method | Endpoint | Description |
