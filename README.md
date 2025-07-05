@@ -27,7 +27,7 @@ A full-featured real-time chat application built with Django, supporting both we
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/django-chat-app.git
+   git clone https://github.com/mohamedkamelx/chat-application.git
    cd chat-application
    ```
 
